@@ -137,12 +137,14 @@ jobs:
           fi
           echo "ADC token check passed."
 
-          echo "Checking Service Usage access for firestore.googleapis.com..."
-          if ! gcloud services describe firestore.googleapis.com --project "$VITE_FIREBASE_PROJECT_ID" --format='value(name)' >/dev/null 2>&1; then
-            echo "::error::Service Usage check failed for project '$VITE_FIREBASE_PROJECT_ID'. Grant roles/serviceusage.serviceUsageViewer (or broader) to the deploy service account."
-            exit 1
+          echo "Active account(s):"
+          gcloud auth list || true
+          echo "Checking Service Usage access for firestore.googleapis.com (diagnostic, non-fatal)..."
+          if gcloud services describe firestore.googleapis.com --project "$VITE_FIREBASE_PROJECT_ID" --format='value(name,state)'; then
+            echo "Service Usage check passed."
+          else
+            echo "::warning::Service Usage describe returned non-zero (see error above). Continuing to deploy; firebase-tools will surface any real permission errors."
           fi
-          echo "Service Usage check passed."
 
       - name: Deploy Firestore rules and indexes
         run: npx firebase-tools deploy --project "$VITE_FIREBASE_PROJECT_ID" --only firestore:rules,firestore:indexes --non-interactive
