@@ -125,6 +125,54 @@ To deploy everything at once (hosting + Firestore rules):
 firebase deploy
 ```
 
+## Auto-Deploy on Push to `main` (GitHub Actions)
+
+This repo includes a workflow at `.github/workflows/firebase-deploy.yml` that:
+
+- Runs tests and build on every push to `main`.
+- Deploys to Firebase only if those checks pass.
+- Uses Node 24 in CI.
+
+Set the following repository secret before using it:
+
+- `GCP_SERVICE_ACCOUNT_EMAIL`: Service account email used for deploys.
+  - this can be found under [Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts?cloudshell=true&project=steering-committee-game)
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: Full Workload Identity Provider resource name.
+  - create the identity pool
+    ```bash
+    gcloud iam workload-identity-pools create github-actions-pool --project=steering-committee-game --location=global --display-name="GitHub Actions Pool"
+     ```
+  - give access for the GitHub OIDC provider
+    ```bash
+    gcloud iam workload-identity-pools providers create-oidc github-provider --project=steering-committee-game --location=global --workload-identity-pool=github-actions-pool --display-name="GitHub Provider" --issuer-uri="https://token.actions.githubusercontent.com" --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" --attribute-condition="assertion.repository=='Lansing-Tech-Studio/steering-committee' && assertion.ref=='refs/heads/main'"
+    ```
+  - grab the project ID
+    ```bash
+    gcloud projects describe steering-committee-game --format="value(projectNumber)"
+    ```
+  - add the policy binding
+    ```bash
+    gcloud iam service-accounts add-iam-policy-binding github-actions@steering-committee-game.iam.gserviceaccount.com --project=steering-committee-game --role="roles/iam.workloadIdentityUser" --member="principalSet://iam.googleapis.com/projects/648140424313/locations/global/workloadIdentityPools/github-actions-pool/attribute.repository/Lansing-Tech-Studio/steering-committee"
+    ```
+  - list the providers to set the value
+    ```bash
+    gcloud iam workload-identity-pools providers list --project=steering-committee-game --location=global --workload-identity-pool=github-actions-pool --format="value(name)"
+    ```
+
+The build also needs your Firebase web app config as repository secrets (same values you
+use in `.env.local`):
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+
+Before the auth with work, also need to enable [IAM Service Account Credentials API](https://console.cloud.google.com/apis/api/iamcredentials.googleapis.com/metrics?project=steering-committee-game).
+
+The workflow deploys `hosting`, `firestore.rules`, and `firestore.indexes.json`.
+
 ---
 
 ## Architecture
