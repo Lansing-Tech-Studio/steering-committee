@@ -92,6 +92,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -117,7 +119,30 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
 
+      - name: Preflight debug and permission checks (Firestore)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Deploy target project: ${VITE_FIREBASE_PROJECT_ID:-<unset>}"
+          if [[ -z "${VITE_FIREBASE_PROJECT_ID:-}" ]]; then
+            echo "::error::VITE_FIREBASE_PROJECT_ID is not set. Add it in repository secrets."
+            exit 1
+          fi
+
+          ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -n 1)"
+          echo "Active gcloud account: ${ACTIVE_ACCOUNT:-<none>}"
+          if [[ -z "${ACTIVE_ACCOUNT:-}" ]]; then
+            echo "::error::No active gcloud account after Workload Identity authentication."
+            exit 1
+          fi
+
+          echo "Checking Service Usage access for firestore.googleapis.com..."
+          if ! gcloud services describe firestore.googleapis.com --project "$VITE_FIREBASE_PROJECT_ID" --format='value(name)' >/dev/null 2>&1; then
+            echo "::error::Service Usage check failed for project '$VITE_FIREBASE_PROJECT_ID'. Grant roles/serviceusage.serviceUsageViewer (or broader) to the deploy service account."
+            exit 1
+          fi
+          echo "Service Usage check passed."
+
       - name: Deploy Firestore rules and indexes
         run: npx firebase-tools deploy --project "$VITE_FIREBASE_PROJECT_ID" --only firestore:rules,firestore:indexes --non-interactive
-        env:
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
