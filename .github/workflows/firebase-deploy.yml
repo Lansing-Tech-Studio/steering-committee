@@ -130,12 +130,12 @@ jobs:
             exit 1
           fi
 
-          ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -n 1)"
-          echo "Active gcloud account: ${ACTIVE_ACCOUNT:-<none>}"
-          if [[ -z "${ACTIVE_ACCOUNT:-}" ]]; then
-            echo "::error::No active gcloud account after Workload Identity authentication."
+          echo "Credential file path present: ${GOOGLE_GHA_CREDS_PATH:+yes}"
+          if ! gcloud auth application-default print-access-token >/dev/null 2>&1; then
+            echo "::error::Unable to get Application Default Credentials access token after Workload Identity authentication."
             exit 1
           fi
+          echo "ADC token check passed."
 
           echo "Checking Service Usage access for firestore.googleapis.com..."
           if ! gcloud services describe firestore.googleapis.com --project "$VITE_FIREBASE_PROJECT_ID" --format='value(name)' >/dev/null 2>&1; then
