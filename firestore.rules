@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isRoomHost(joinCode) {
+      return isSignedIn()
+        && request.auth.uid == get(/databases/$(database)/documents/rooms/$(joinCode)).data.hostId;
+    }
+
+    match /rooms/{joinCode} {
+      // Anyone (signed in) can read the public room document
+      allow read: if isSignedIn();
+
+      // Any signed-in user can create a new room
+      allow create: if isSignedIn()
+        && request.resource.data.hostId == request.auth.uid;
+
+      // Any signed-in user can update the room
+      // (host logic runs client-side; we rely on game logic for integrity)
+      allow update: if isSignedIn();
+
+      // ── Players sub-collection ──────────────────────────────────────────
+      match /players/{playerId} {
+        // Everyone in the room can see who has/hasn't submitted
+        allow read: if isSignedIn();
+        // Player can write self; host can orchestrate round-state updates for all players
+        allow write: if isSignedIn()
+          && (request.auth.uid == playerId || isRoomHost(joinCode));
+      }
+
+      // ── Hands sub-collection ────────────────────────────────────────────
+      match /hands/{playerId} {
+        // Players read own hand; host reads all hands to execute/deal turns.
+        allow read: if isSignedIn()
+          && (request.auth.uid == playerId || isRoomHost(joinCode));
+        // Host deals/refills cards; player may keep own hand in sync if needed
+        allow write: if isSignedIn()
+          && (request.auth.uid == playerId || isRoomHost(joinCode));
+      }
+
+      // ── Submissions sub-collection ──────────────────────────────────────
+      match /submissions/{playerId} {
+        // Submissions are readable by everyone once submitted
+        // (only contains cardIndex, not card type — hand is private so this is safe)
+        allow read: if isSignedIn();
+        // Player submits own card; host clears all submissions after execution
+        allow write: if isSignedIn()
+          && (request.auth.uid == playerId || isRoomHost(joinCode));
+      }
+    }
+  }
+}
