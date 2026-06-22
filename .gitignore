@@ -26,3 +26,12 @@ yarn-error.log*
 # Environment files (local configs)
 /.env.local
 node_modules
+
+# Test artifacts
+test-results/
+playwright-report/
+blob-report/
+coverage/
+.nyc_output/
+.playwright/
+.playwright-mcp/
